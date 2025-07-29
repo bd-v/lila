@@ -1,56 +1,100 @@
 import streamlit as st
-from openai import OpenAI
+from supabase import create_client
+import requests
+import base64
+import json
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
-)
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_ANON_KEY"]
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+MODEL_NAME = "meta-llama/llama-4-scout-17b-16e-instruct"
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+st.set_page_config(page_title="LILA", page_icon=":material/design_services:")
+st.title("Hi, I'm LILA.")
+st.header("Your Lifetime Interior Layout Assistant")
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+def file_to_data_url(file):
+    data = file.read()
+    encoded = base64.b64encode(data).decode()
+    mime = file.type
+    return f"data:{mime};base64,{encoded}"
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+def query_groq(image_url):
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    prompt = """
+        "You are a interior designer that specializes in finding the perfect rug to fit a space."
+        "The user will give you an image of their room."
+        Respond with a JSON object with fields: {
+            'style': The rug's primary style (e.g. traditional, contemporary, outdoor),
+            'color': The rug's primary color (one word),
+            'pattern': The rug's pattern (one word)
+        }.
+        Only respond with a JSON object. Do not include comments or text.
+        """
+    body = {
+        "model": MODEL_NAME,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                    {"type": "text", "text": prompt}
+                ]
+            }
+        ]
+    }
+    response = requests.post(GROQ_API_URL, headers=headers, json=body)
+    response.raise_for_status()
+    content = response.json()["choices"][0]["message"]["content"]
+    try:
+        parsed = json.loads(content)
+        return parsed
+    except json.JSONDecodeError:
+        st.error("Model did not return valid JSON.")
+        st.text(content)
+        return None
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+def search_rugs(style, color, pattern):
+    result = supabase.table("rugs").select("*") \
+        .ilike("color", f"%{color}%") \
+        .ilike("style", f"%{style}%") \
+        .ilike("pattern", f"%{pattern}%") \
+        .limit(1) \
+        .execute()
+    return result.data[0] if result.data else None
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+with st.container():
+    user_input = st.chat_input("What would you like to ask?")
+    col1, col2 = st.columns(2)
+    with col1:
+        uploaded_file = st.file_uploader("Upload a photo of your room", type=["jpg", "jpeg", "png"])
+    with col2:
+        image_url = st.text_input("Or paste an image URL")
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+if uploaded_file or image_url:
+    if uploaded_file:
+        image_source = file_to_data_url(uploaded_file)
+    else:
+        image_source = image_url
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
-        )
+    st.image(image_source, caption="Room Image", use_column_width=True)
+    st.info("Thinking...")
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+    result = query_groq(image_source)
+
+    if result:
+        st.success("Here's your perfect rug!")
+        st.json(result)
+
+        rug = search_rugs(result["style"], result["color"], result["pattern"])
+        if rug:
+            st.subheader("Recommended Rug:")
+            st.markdown(f"**{rug['name']}** — *{rug['style']} style, {rug['color']} color*")
+            st.image(rug["image_url"], width=400)
+        else:
+            st.warning("No matching rug found in database. Try changing your image.")
