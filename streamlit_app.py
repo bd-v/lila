@@ -8,6 +8,7 @@ from io import BytesIO
 from groq import Groq
 from supabase import create_client
 import logging
+import pandas as pd
 
 # Page configuration
 st.set_page_config(
@@ -97,12 +98,12 @@ def analyze_room_image(groq_client, image):
         Respond ONLY with valid JSON in this exact format (no other text, no markdown, no explanations):
         
         {
-            "style1": "Contemporary",
-            "style2": "Modern",
-            "colorMain": "Grey",
-            "colorMinor": "White",
-            "Brightness": "Light",
-            "hue": "Cool"
+            "style1": "",
+            "style2": "",
+            "colorMain": "",
+            "colorMinor": "",
+            "Brightness": "",
+            "hue": ""
         }
         
         Choose from these options only:
@@ -277,20 +278,17 @@ def is_interior_design_related(message):
 def predict_rug_features(model_data, room_features):
     """Use decision tree to predict rug features"""
     try:
-        model = model_data.get('model')
-        
-        # If no actual model, use rule-based predictions
-        if model is None:
+        if model_data is None:
             return predict_rug_rule_based(room_features)
         
-        feature_names = model_data['feature_names']
+        feature_names = model_data.get_params()
         
         # Convert room features to numerical format for decision tree
         feature_vector = encode_room_features(room_features, feature_names)
         
         # Make prediction
-        prediction = model.predict([feature_vector])[0]
-        probabilities = model.predict_proba([feature_vector])[0]
+        prediction = model_data.predict([feature_vector])[0]
+        probabilities = model_data.predict_proba([feature_vector])[0]
         
         return {
             'predicted_rug_type': prediction,
@@ -328,34 +326,39 @@ def encode_room_features(room_features, feature_names):
     feature_vector = []
     
     # Encoding maps
-    style1_map = {'traditional': 0, 'contemporary': 1, 'boho': 2, 'outdoor': 3}
-    style2_map = {'ornate': 0, 'modern': 1, 'classic': 2, 'solid': 3, 'geometric': 4, 'persian': 5, 'abstract': 6}
-    color_main_map = {'blue': 0, 'grey': 1, 'red': 2, 'multi': 3, 'ivory': 4, 'tan': 5, 'taupe': 6}
-    color_minor_map = {'ivory': 0, 'multi': 1, 'white': 2, 'grey': 3, 'black': 4, 'blue': 5}
-    brightness_map = {'light': 0, 'dark': 1}
-    hue_map = {'warm': 0, 'cool': 1}
+    # style1_map = {'traditional': 0, 'contemporary': 1, 'boho': 2, 'outdoor': 3}
+    # style2_map = {'ornate': 0, 'modern': 1, 'classic': 2, 'solid': 3, 'geometric': 4, 'persian': 5, 'abstract': 6}
+    # color_main_map = {'blue': 0, 'grey': 1, 'red': 2, 'multi': 3, 'ivory': 4, 'tan': 5, 'taupe': 6}
+    # color_minor_map = {'ivory': 0, 'multi': 1, 'white': 2, 'grey': 3, 'black': 4, 'blue': 5}
+    # brightness_map = {'light': 0, 'dark': 1}
+    # hue_map = {'warm': 0, 'cool': 1}
     
-    for feature_name in feature_names:
-        if 'style1' in feature_name.lower():
-            value = room_features.get('style1', '').lower()
-            feature_vector.append(style1_map.get(value, 1))  # Default to contemporary
-        elif 'style2' in feature_name.lower():
-            value = room_features.get('style2', '').lower()
-            feature_vector.append(style2_map.get(value, 1))  # Default to modern
-        elif 'colormain' in feature_name.lower():
-            value = room_features.get('colorMain', '').lower()
-            feature_vector.append(color_main_map.get(value, 1))  # Default to grey
-        elif 'colorminor' in feature_name.lower():
-            value = room_features.get('colorMinor', '').lower()
-            feature_vector.append(color_minor_map.get(value, 2))  # Default to white
-        elif 'brightness' in feature_name.lower():
-            value = room_features.get('Brightness', '').lower()
-            feature_vector.append(brightness_map.get(value, 0))  # Default to light
-        elif 'hue' in feature_name.lower():
-            value = room_features.get('hue', '').lower()
-            feature_vector.append(hue_map.get(value, 1))  # Default to cool
-        else:
-            feature_vector.append(0)  # Default value
+    # for feature_name in feature_names:
+    #     if 'style1' in feature_name.lower():
+    #         value = room_features.get('style1', '').lower()
+    #         feature_vector.append(style1_map.get(value, 1))  # Default to contemporary
+    #     elif 'style2' in feature_name.lower():
+    #         value = room_features.get('style2', '').lower()
+    #         feature_vector.append(style2_map.get(value, 1))  # Default to modern
+    #     elif 'colormain' in feature_name.lower():
+    #         value = room_features.get('colorMain', '').lower()
+    #         feature_vector.append(color_main_map.get(value, 1))  # Default to grey
+    #     elif 'colorminor' in feature_name.lower():
+    #         value = room_features.get('colorMinor', '').lower()
+    #         feature_vector.append(color_minor_map.get(value, 2))  # Default to white
+    #     elif 'brightness' in feature_name.lower():
+    #         value = room_features.get('Brightness', '').lower()
+    #         feature_vector.append(brightness_map.get(value, 0))  # Default to light
+    #     elif 'hue' in feature_name.lower():
+    #         value = room_features.get('hue', '').lower()
+    #         feature_vector.append(hue_map.get(value, 1))  # Default to cool
+    #     else:
+    #         feature_vector.append(0)  # Default value
+   
+    with open('preprocessor.pkl', 'rb') as f:
+            preprocessor = pickle.load(f)
+    df = pd.DataFrame(room_features)
+    feature_vector = preprocessor.transform(df)
     
     return feature_vector
 
