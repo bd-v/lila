@@ -6,7 +6,7 @@ import base64
 import json
 
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_ANON_KEY"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL_NAME = "meta-llama/llama-4-scout-17b-16e-instruct"
