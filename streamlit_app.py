@@ -448,6 +448,7 @@ with col1:
                             # Search database for recommendations
                             print(rug_prediction['predicted_rug_type'])
                             rug_recommendations = search_rugs_in_database(supabase_client, rug_prediction, flag)
+                            print(rug_recommendations)
                             st.session_state.rug_recommendations = rug_recommendations
 
 with col2:
@@ -515,7 +516,7 @@ if st.session_state.rug_recommendations:
     
     if len(st.session_state.rug_recommendations) > 0:
         for i, rug in enumerate(st.session_state.rug_recommendations):
-            with st.expander(f"Rug Option {i+1}: {rug.get('name', 'Unnamed Rug')}"):
+            with st.expander(f"Rug Option {i+1}: {rug.get('design', 'Unnamed Rug')}"):
                 col_a, col_b = st.columns([1, 2])
                 
                 with col_a:
@@ -528,7 +529,7 @@ if st.session_state.rug_recommendations:
                     st.write(f"**Collection:** {rug.get('collection', 'N/A')}")
                     st.write(f"**Style:** {rug.get('style1', 'N/A')}")
                     st.write(f"**Color:** {rug.get('colorMain', 'N/A')}")
-                    st.write(f"**Design:** {rug.get('design', 'N/A')}")
+                    st.write(f"**Design:** {rug.get('style2', 'N/A')}")
                     
                     if rug.get('purchase_url'):
                         st.link_button("View Product", rug['purchase_url'])
