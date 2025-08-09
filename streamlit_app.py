@@ -9,6 +9,8 @@ from groq import Groq
 from supabase import create_client
 import logging
 import pandas as pd
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
 
 # Page configuration
 st.set_page_config(
@@ -45,28 +47,46 @@ def initialize_clients():
 
 @st.cache_resource
 def load_decision_tree():
-    """Load the decision tree model"""
-    try:
-        with open('decision_tree.pkl', 'rb') as f:
-            model_data = pickle.load(f)
-        return model_data
-    except FileNotFoundError:
-        st.warning("Decision tree model not found. Using fallback mode.")
-        # Return a mock model structure for demo purposes
-        return {
-            'model': None,
-            'feature_names': ['style1', 'style2', 'colorMain', 'colorMinor', 'Brightness', 'hue'],
-            'target_classes': ['Persian', 'Modern', 'Traditional', 'Boho']
-        }
-    except Exception as e:
-        st.error(f"Error loading decision tree model: {str(e)}")
-        # Return fallback
-        return {
-            'model': None,
-            'feature_names': ['style1', 'style2', 'colorMain', 'colorMinor', 'Brightness', 'hue'],
-            'target_classes': ['Persian', 'Modern', 'Traditional', 'Boho']
-        }
+    """Load the decision tree model in a consistent format."""
+    with open('decision_tree.pkl', 'rb') as f:
+        model = pickle.load(f)
+    return model
 
+    #     # If pickle already contains a dict with a model
+    #     if isinstance(loaded_obj, dict) and 'model' in loaded_obj:
+    #         return loaded_obj
+
+    #     # If pickle contains just the model
+    #     if hasattr(loaded_obj, "predict"):
+    #         return {
+    #             "model": loaded_obj,
+    #             "feature_names": getattr(loaded_obj, "feature_names_in_", []),
+    #             "target_classes": list(getattr(loaded_obj, "classes_", []))
+    #         }
+
+    #     # Fallback if structure is unexpected
+    #     st.warning("Decision tree file loaded but structure was unexpected. Using fallback.")
+    #     return {
+    #         'model': None,
+    #         'feature_names': ['style1', 'style2', 'colorMain', 'colorMinor', 'Brightness', 'hue'],
+    #         'target_classes': ['Persian', 'Modern', 'Traditional', 'Boho']
+    #     }
+
+    # except FileNotFoundError:
+    #     st.warning("Decision tree model not found. Using fallback mode.")
+    #     return {
+    #         'model': None,
+    #         'feature_names': ['style1', 'style2', 'colorMain', 'colorMinor', 'Brightness', 'hue'],
+    #         'target_classes': ['Persian', 'Modern', 'Traditional', 'Boho']
+    #     }
+    # except Exception as e:
+    #     st.error(f"Error loading decision tree model: {str(e)}")
+    #     return {
+    #         'model': None,
+    #         'feature_names': ['style1', 'style2', 'colorMain', 'colorMinor', 'Brightness', 'hue'],
+    #         'target_classes': ['Persian', 'Modern', 'Traditional', 'Boho']
+    #     }
+    
 def encode_image(image):
     """Convert PIL Image to base64 string for API"""
     buffered = BytesIO()
@@ -275,27 +295,23 @@ def is_interior_design_related(message):
     message_lower = message.lower()
     return any(keyword in message_lower for keyword in interior_keywords)
 
-def predict_rug_features(model_data, room_features):
-    """Use decision tree to predict rug features"""
+def predict_rug_features(model, room_features):
+    """Use decision tree to predict rug features."""
     try:
-        if model_data is None:
-            return predict_rug_rule_based(room_features)
-        
-        feature_names = model_data.get_params()
-        
-        # Convert room features to numerical format for decision tree
-        feature_vector = encode_room_features(room_features, feature_names)
-        
-        # Make prediction
-        prediction = model_data.predict([feature_vector])[0]
-        probabilities = model_data.predict_proba([feature_vector])[0]
-        
+        if model is None:
+            print("Model is NONE")
+            return predict_rug_rule_based(room_features), 1
+
+        feature_vector = encode_room_features(room_features)
+        prediction = model.predict(feature_vector)[0]
+        probabilities = model.predict_proba(feature_vector)[0]
+
         return {
             'predicted_rug_type': prediction,
-            'confidence': max(probabilities),
+            'confidence': float(max(probabilities)),
             'feature_vector': feature_vector
-        }
-        
+        }, 0
+
     except Exception as e:
         st.error(f"Error making prediction: {str(e)}")
         return predict_rug_rule_based(room_features)
@@ -319,56 +335,53 @@ def predict_rug_rule_based(room_features):
         'predicted_rug_type': predicted_type,
         'confidence': 0.8,
         'method': 'rule_based'
-    }
+    }, 0
 
-def encode_room_features(room_features, feature_names):
+def encode_room_features(room_features):
     """Convert room features to numerical vector"""
     feature_vector = []
     
-    # Encoding maps
-    # style1_map = {'traditional': 0, 'contemporary': 1, 'boho': 2, 'outdoor': 3}
-    # style2_map = {'ornate': 0, 'modern': 1, 'classic': 2, 'solid': 3, 'geometric': 4, 'persian': 5, 'abstract': 6}
-    # color_main_map = {'blue': 0, 'grey': 1, 'red': 2, 'multi': 3, 'ivory': 4, 'tan': 5, 'taupe': 6}
-    # color_minor_map = {'ivory': 0, 'multi': 1, 'white': 2, 'grey': 3, 'black': 4, 'blue': 5}
-    # brightness_map = {'light': 0, 'dark': 1}
-    # hue_map = {'warm': 0, 'cool': 1}
-    
-    # for feature_name in feature_names:
-    #     if 'style1' in feature_name.lower():
-    #         value = room_features.get('style1', '').lower()
-    #         feature_vector.append(style1_map.get(value, 1))  # Default to contemporary
-    #     elif 'style2' in feature_name.lower():
-    #         value = room_features.get('style2', '').lower()
-    #         feature_vector.append(style2_map.get(value, 1))  # Default to modern
-    #     elif 'colormain' in feature_name.lower():
-    #         value = room_features.get('colorMain', '').lower()
-    #         feature_vector.append(color_main_map.get(value, 1))  # Default to grey
-    #     elif 'colorminor' in feature_name.lower():
-    #         value = room_features.get('colorMinor', '').lower()
-    #         feature_vector.append(color_minor_map.get(value, 2))  # Default to white
-    #     elif 'brightness' in feature_name.lower():
-    #         value = room_features.get('Brightness', '').lower()
-    #         feature_vector.append(brightness_map.get(value, 0))  # Default to light
-    #     elif 'hue' in feature_name.lower():
-    #         value = room_features.get('hue', '').lower()
-    #         feature_vector.append(hue_map.get(value, 1))  # Default to cool
-    #     else:
-    #         feature_vector.append(0)  # Default value
-   
-    with open('preprocessor.pkl', 'rb') as f:
-            preprocessor = pickle.load(f)
-    df = pd.DataFrame(room_features)
-    feature_vector = preprocessor.transform(df)
+    rugs = pd.read_csv("projectDatabase.csv")
+    test_case = pd.DataFrame([room_features])
+    rugs = pd.concat([rugs, test_case])
+
+    X = rugs[['style1','style2','colorMain','colorMinor','Brightness','hue']]
+    y = rugs['design']
+
+    # Define which columns are categorical
+    categorical_features = ['style1','style2','colorMain','colorMinor','Brightness','hue']
+
+    # Create ColumnTransformer to apply OneHotEncoder to categorical columns only
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features) # Add handle_unknown='ignore'
+        ],
+        remainder='passthrough'  # keep the other columns (e.g., 'weight') as is
+    )
+
+    # Transform the features
+    X_encoded = preprocessor.fit_transform(X)
+
+    # Optional: convert to DataFrame with column names
+    feature_names = preprocessor.named_transformers_['cat'].get_feature_names_out(categorical_features)
+    # Remove 'weight' from final_feature_names as it's not in X
+    final_feature_names = list(feature_names)
+    X_encoded_df = pd.DataFrame(X_encoded.toarray(), columns=final_feature_names)
+
+    feature_vector = X_encoded_df.tail(1)
     
     return feature_vector
 
-def search_rugs_in_database(supabase_client, rug_prediction):
+def search_rugs_in_database(supabase_client, rug_prediction, flag):
     """Search for similar rugs in Supabase database"""
     try:
         predicted_type = rug_prediction['predicted_rug_type']
         
         # Search for rugs matching the predicted type
-        response = supabase_client.table('rugs').select('*').eq('style1', predicted_type).limit(5).execute()
+        if flag == 0:
+            response = supabase_client.table('rugs').select('*').eq('design', predicted_type).limit(5).execute()
+        elif flag == 1:
+            response = supabase_client.table('rugs').select('*').eq('style1', predicted_type).limit(5).execute()
         
         # If no exact matches, search for similar styles
         if not response.data:
@@ -384,7 +397,7 @@ def search_rugs_in_database(supabase_client, rug_prediction):
 # Initialize clients and model
 try:
     groq_client, supabase_client = initialize_clients()
-    model_data = load_decision_tree()
+    model = load_decision_tree()
 except Exception as e:
     st.error(f"Failed to initialize: {str(e)}")
     st.stop()
@@ -421,18 +434,20 @@ with col1:
         if st.button("🔍 Analyze Room", type="primary"):
             with st.spinner("LILA is analyzing your room..."):
                 room_features = analyze_room_image(groq_client, image)
-                
+                print(room_features)
+
                 if room_features:
                     st.session_state.room_features = room_features
                     st.success("Room analysis complete!")
                     
                     # Make prediction with decision tree
                     with st.spinner("Finding perfect rug matches..."):
-                        rug_prediction = predict_rug_features(model_data, room_features)
+                        rug_prediction, flag = predict_rug_features(model, room_features)
                         
                         if rug_prediction:
                             # Search database for recommendations
-                            rug_recommendations = search_rugs_in_database(supabase_client, rug_prediction)
+                            print(rug_prediction['predicted_rug_type'])
+                            rug_recommendations = search_rugs_in_database(supabase_client, rug_prediction, flag)
                             st.session_state.rug_recommendations = rug_recommendations
 
 with col2:
