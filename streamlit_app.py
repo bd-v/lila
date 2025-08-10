@@ -51,41 +51,6 @@ def load_decision_tree():
     with open('decision_tree.pkl', 'rb') as f:
         model = pickle.load(f)
     return model
-
-    #     # If pickle already contains a dict with a model
-    #     if isinstance(loaded_obj, dict) and 'model' in loaded_obj:
-    #         return loaded_obj
-
-    #     # If pickle contains just the model
-    #     if hasattr(loaded_obj, "predict"):
-    #         return {
-    #             "model": loaded_obj,
-    #             "feature_names": getattr(loaded_obj, "feature_names_in_", []),
-    #             "target_classes": list(getattr(loaded_obj, "classes_", []))
-    #         }
-
-    #     # Fallback if structure is unexpected
-    #     st.warning("Decision tree file loaded but structure was unexpected. Using fallback.")
-    #     return {
-    #         'model': None,
-    #         'feature_names': ['style1', 'style2', 'colorMain', 'colorMinor', 'Brightness', 'hue'],
-    #         'target_classes': ['Persian', 'Modern', 'Traditional', 'Boho']
-    #     }
-
-    # except FileNotFoundError:
-    #     st.warning("Decision tree model not found. Using fallback mode.")
-    #     return {
-    #         'model': None,
-    #         'feature_names': ['style1', 'style2', 'colorMain', 'colorMinor', 'Brightness', 'hue'],
-    #         'target_classes': ['Persian', 'Modern', 'Traditional', 'Boho']
-    #     }
-    # except Exception as e:
-    #     st.error(f"Error loading decision tree model: {str(e)}")
-    #     return {
-    #         'model': None,
-    #         'feature_names': ['style1', 'style2', 'colorMain', 'colorMinor', 'Brightness', 'hue'],
-    #         'target_classes': ['Persian', 'Modern', 'Traditional', 'Boho']
-    #     }
     
 def encode_image(image):
     """Convert PIL Image to base64 string for API"""
@@ -137,7 +102,7 @@ def analyze_room_image(groq_client, image):
         
         # Make API call to Groq
         response = groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",  # Correct model name
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=[
                 {
                     "role": "user",
@@ -162,9 +127,6 @@ def analyze_room_image(groq_client, image):
         if not response_text or response_text.strip() == "":
             st.warning("Empty response from Groq API, using fallback analysis")
             return create_fallback_analysis()
-        
-        # Debug: Show raw response (remove this in production)
-        st.write("Debug - Raw API Response:", response_text[:200] + "...")
         
         # Clean response
         response_text = response_text.strip()
@@ -448,7 +410,6 @@ with col1:
                             # Search database for recommendations
                             print(rug_prediction['predicted_rug_type'])
                             rug_recommendations = search_rugs_in_database(supabase_client, rug_prediction, flag)
-                            print(rug_recommendations)
                             st.session_state.rug_recommendations = rug_recommendations
 
 with col2:
